@@ -1,0 +1,14 @@
+[Unit]
+Description=Backup de arquivos em tempo real para o disco escolhido pelo usuário
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash %h/.Scripts/backup_usr_files.sh
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
