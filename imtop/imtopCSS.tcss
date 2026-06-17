@@ -1,0 +1,46 @@
+Label {
+    text-align: justify;
+}
+
+#title_label {
+    text-style: bold italic underline;
+    
+}
+
+# #cpu_temp {
+#     padding: 2;
+#     margin: 2 5;
+# }
+
+# #cpu_cache {
+#     padding: 2;
+#     margin: 1 6;
+# }
+
+# #cpu_clock {
+#     padding: 1 3;
+#     margin: 0 10;
+# }
+
+# #cpu_text {
+#     padding: 1;
+#     margin: 1 3;
+# }
+
+# #cpu_temp, #cpu_cache, #cpu_clock, #cpu_text {
+#     align: center  middle;
+# }
+
+#cpu_temp_panel, #cpu_cache_panel, #cpu_clock_panel, #cpu_text_panel {
+    border: round $primary;
+    align: center  middle;
+    margin: 1;
+}
+
+#cpu_clock_panel, #cpu_text_panel {
+    padding: 1;
+}
+
+#cpu_temp_panel, #cpu_cache_panel {
+    padding: 3;
+}
