@@ -44,3 +44,21 @@ Label {
 #cpu_temp_panel, #cpu_cache_panel {
     padding: 3;
 }
+
+#mem_info_panel {
+    border: round $primary;
+    align: center  middle;
+    margin: 1;
+}
+
+#sto_info_panel {
+    border: round $primary;
+    align: center  middle;
+    margin: 1;
+}
+
+#net_info_panel {
+    border: round $primary;
+    align: center  middle;
+    margin: 1;
+}

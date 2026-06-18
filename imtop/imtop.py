@@ -13,7 +13,7 @@ import json
 from textual.app import App, ComposeResult
 from textual.screen import Screen
 from textual.containers import VerticalGroup, HorizontalGroup
-from textual.widgets import Footer, Placeholder, Rule, Label, OptionList, Button
+from textual.widgets import Footer, Placeholder, Rule, Label, OptionList, Header
 from textual.widgets.option_list import Option
 from textual.reactive import reactive
 
@@ -27,18 +27,18 @@ class CPUScreen(Screen):
 
     async def parse_info(self) -> None:
         """ Função responsável por ler e descrever informações gerais sobre o processador """
-        parse_dmi = await asyncio.create_subprocess_exec(
-            "sudo", "dmidecode", "-t", "processor",
+        exec_dmi = await asyncio.create_subprocess_exec(
+            "dmidecode", "-t", "processor",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        parse_lscpu = await asyncio.create_subprocess_exec(
+        exec_lscpu = await asyncio.create_subprocess_exec(
             "lscpu",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        out_dmi, err_dmi = await parse_dmi.communicate()
-        out_lscpu, err_lscpu = await parse_lscpu.communicate()
+        out_dmi, err_dmi = await exec_dmi.communicate()
+        out_lscpu, err_lscpu = await exec_lscpu.communicate()
         
         texto = out_dmi.decode() + "\n" + out_lscpu.decode()
         cpu_info_local = {}
@@ -142,6 +142,7 @@ class CPUScreen(Screen):
         self.run_worker(self.refresh_clock())
 
     def compose(self) -> ComposeResult:
+        yield Header(name="IMTOP", show_clock=True)
         yield Label(content= "", id="title_label")
         with VerticalGroup():
             
@@ -179,12 +180,12 @@ class MemScreen(Screen):
         return f"{kb / 1024 / 1024:.1f} GiB"
     
     async def parse_mem(self) -> None:
-        parse_dmi = await asyncio.create_subprocess_exec(
-            "sudo", "dmidecode", "-t", "17",
+        exec_dmi = await asyncio.create_subprocess_exec(
+            "dmidecode", "-t", "17",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        out_dmi, err_dmi = await parse_dmi.communicate()
+        out_dmi, err_dmi = await exec_dmi.communicate()
 
         mem_info_local = {"Total": "", "Available": "", "Cached": "", "Size": [], "Form Factor": [], "Locator": [], "Type": [], 
                          "Speed": [], "Serial": [], "Manufacturer": [], "Part Num": []}
@@ -296,12 +297,14 @@ class MemScreen(Screen):
         self.query_one("#mem_info", Label).update(self.format_mem_info(value))
     
     def compose(self) -> ComposeResult:
-        with VerticalGroup():
+        yield Header(name="IMTOP", show_clock=True)
+        with VerticalGroup(id="mem_info_panel"):
             yield Label(content="", id="mem_info")
         yield Footer()
 
     async def on_mount(self) -> None:
         await self.parse_mem()
+        self.query_one("#mem_info_panel").border_title = "Informações sobre Memória"
 
 
 class StoScreen(Screen):
@@ -310,12 +313,12 @@ class StoScreen(Screen):
 
     async def mount_sto_option(self) -> None:
         """ Função responsãvel por adicionar as opções de unidades de disco à lista """
-        parse_lsblk = await asyncio.create_subprocess_exec(
+        exec_lsblk = await asyncio.create_subprocess_exec(
             "lsblk", "-J", "-e", "1,7", "-do", "NAME,SIZE,MODEL,SERIAL,MOUNTPOINTS",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        out_lsblk, err_lsblk = await parse_lsblk.communicate()
+        out_lsblk, err_lsblk = await exec_lsblk.communicate()
         
         data = json.loads(out_lsblk.decode())
         devs = {}
@@ -332,7 +335,7 @@ class StoScreen(Screen):
             mounts = dev_info["mount"]
             if mounts and mounts[0]:
                 mountpoint = mounts[0]
-                parse_df = await asyncio.create_subprocess_exec(
+                exec_df = await asyncio.create_subprocess_exec(
                     "df",
                     "-h",
                     mountpoint,
@@ -340,7 +343,7 @@ class StoScreen(Screen):
                     stderr=asyncio.subprocess.PIPE
                 )
 
-                out_df, err_df = await parse_df.communicate()
+                out_df, err_df = await exec_df.communicate()
 
                 texto_df = out_df.decode()
                 for line in texto_df.splitlines():
@@ -351,15 +354,14 @@ class StoScreen(Screen):
                             dev_info["avail"] = line_split[3]
                             dev_info["use%"] = line_split[4]
             
-            parse_hdparm = await asyncio.create_subprocess_exec(
-                "sudo",
+            exec_hdparm = await asyncio.create_subprocess_exec(
                 "hdparm",
                 "-i",
                 f"/dev/{dev_name}",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            out_hdparm, err_hdparm = await parse_hdparm.communicate()
+            out_hdparm, err_hdparm = await exec_hdparm.communicate()
 
             texto_hdparm = out_hdparm.decode()
             for line in texto_hdparm.splitlines():
@@ -407,19 +409,141 @@ class StoScreen(Screen):
         )
 
     def compose(self) -> ComposeResult:
+        yield Header(name="IMTOP", show_clock=True)
         yield OptionList(id="sto_options")
-        yield Label(content="Selecione um dispositivo", id="sto_info")
+        with VerticalGroup(id="sto_info_panel"):
+            yield Label(content="Selecione um dispositivo", id="sto_info")
         yield Footer()
 
     async def on_mount(self) -> None:
         await self.mount_sto_option()
+        self.query_one("#sto_info_panel").border_title = "Informações sobre Unidade de Disco"
 
 
 class NetScreen(Screen):
     """ Classe da tela de rede """
+    net_info = reactive({"name": [], 
+                "ipv4": [], 
+                "ipv6": [], 
+                "mac": [],
+                "broad": [],
+                "multi": [],
+                "up": [],
+                "lower_up": [],
+                "mtu": [],
+                "scope": []
+                })
+
+    async def parse_net(self) -> None:
+        exec_netinfo = await asyncio.create_subprocess_exec(
+            "ip", "a",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        out_ip, err_ip = await exec_netinfo.communicate()
+
+        texto = out_ip.decode()
+        net_info_temp = {
+            "name": [], 
+            "ipv4": [], 
+            "ipv6": [], 
+            "mac": [],
+            "broad": [],
+            "multi": [],
+            "up": [],
+            "lower_up": [],
+            "mtu": [],
+            "scope": [],
+            "type": []
+        }
+        count = 0
+        for line in texto.splitlines():
+            line_split = line.split()
+            for index, i in enumerate(line_split):
+                # name
+                if "lo:" in i:
+                    net_info_temp["name"].append(f"Loopback ({i.strip(":")})")
+                if not ("inet" in line or "ether" in i) and ("eth" in i or "enp" in i):
+                    net_info_temp["name"].append(f"Ethernet ({i})")
+                elif "wlan" in i or "wlp" in i:
+                    net_info_temp["name"].append(f"Wireless ({i})")
+
+                # flags
+                elif "<" in i:
+                    i_split = i.strip("<").strip(">").split(",")
+                    for j in i_split:
+                        match (j):
+                            case "BROADCAST":
+                                net_info_temp["broad"].append(True)
+                            case "MULTICAST":
+                                net_info_temp["multi"].append(True)
+                            case "UP":
+                                net_info_temp["up"].append(True)
+                            case "LOWER_UP":
+                                net_info_temp["lower_up"].append(True)
+                    for k in ["broad", "multi", "up", "lower_up"]:
+                        if len(net_info_temp[k]) == count:
+                            net_info_temp[k].append(False)
+
+                # mtu
+                elif "mtu" in i:
+                    net_info_temp["mtu"].append(line_split[index + 1])
+
+                # ip
+                elif i == "inet":
+                    net_info_temp["ipv4"].append(line_split[index + 1])
+                elif i == "inet6":
+                    net_info_temp["ipv6"].append(line_split[index + 1])
+                
+                # mac
+                if "link/" in i:
+                    net_info_temp["mac"].append(line_split[index + 1])
+
+                #scope/type
+                if not line.strip().startswith("inet6") and i == "scope":
+                    net_info_temp["scope"].append(line_split[index + 1])
+                    net_info_temp["type"].append("Dinâmica") if line_split[index + 2] == "dynamic" else net_info_temp["type"].append("Estática")
+                
+            count += 1
+                   
+        self.net_info = net_info_temp
+        print(self.net_info["name"])
+        print(len(self.net_info["name"]))
+
+    def format_net_info(self, value: dict) -> str:
+        texto = ""
+        print(len(value["name"]))
+        for index, _ in enumerate(value["name"]):
+            print("Formatting:", index, value["name"][index])
+            texto += f"Dispositivo de Rede: {value['name'][index]}\n"
+            texto += "-" * len(value['name'][index]) + "\n"
+            texto += f"ipv4: {value['ipv4'][index]}\n"
+            texto += f"ipv6 {value['ipv6'][index]}\n"
+            texto += f"Endereço MAC: {value['mac'][index]}\n"
+            texto += f"MTU: {value['mtu'][index]} bytes\n"
+            texto += f"Escopo: {value['scope'][index]}\n"
+            texto += f"Tipo: {value['type'][index]}"
+            texto += f"Broadcast: {'Sim' if value['broad'][index] else 'Não'}\n"
+            texto += f"Multicast: {'Sim' if value['multi'][index] else 'Não'}\n"
+            texto += f"Ativo pelo Administrador: {'Sim' if value['up'][index] else 'Não'}\n"
+            texto += f"Conecatado Fisicamente: {'Sim' if value['lower_up'][index] else 'Não'}\n"
+            texto += "\n\n\n"
+
+        return texto
+
+
+    def watch_net_info(self, value: dict) -> None:
+        self.query_one("#net_info", Label).update(self.format_net_info(value))
+
     def compose(self) -> ComposeResult:
-        yield Placeholder("NET")
+        yield Header(name="IMTOP", show_clock=True)
+        with VerticalGroup(id="net_info_panel"):
+            yield Label(content="", id="net_info")
         yield Footer()
+
+    async def on_mount(self) -> None:
+        await self.parse_net()
+        self.query_one("#net_info_panel").border_title = "Informações sobre Rede"
 
 
 class ImtopApp(App):
